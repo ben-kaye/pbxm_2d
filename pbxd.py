@@ -1,7 +1,7 @@
 from math import cos, sin, sqrt, atan2
 # from math import pi
 
-class obj:
+class body:
     def __init__(self, m, p, v, I, phi, rate, ID):
         self.p = p
         self.v = v
@@ -11,15 +11,8 @@ class obj:
         self.phi = phi
         self.rate = rate
         self.ID = ID
-
-    def set_p(self, p):
-        self.p_prev = self.p
-        self.p = p
-    def set_p_prev(self, p_prev):
-        self.p_prev = p_prev
-
-
-class particle(obj):
+        
+class particle(body):
     I = 0
     phi = 0
     rate = 0
@@ -34,7 +27,7 @@ class vec2:
 
     def __add__(self, y):
         return vec2(self.x + y.x, self.y + y.y)
-        
+
     def __sub__(self, y):
         return vec2(self.x - y.x, self.y - y.y)
 
@@ -80,11 +73,11 @@ class lin_constr(constr):
         self.comp = comp
         self.lag = 0
         
-    def apply_constr(self, constrs, objs, objdict, h):
+    def apply_constr(self, constrs, bodies, objdict, h):
         c = self
 
-        b1 = objs[objdict.get(c.b1id)]
-        b2 = objs[objdict.get(c.b2id)]
+        b1 = bodies[objdict.get(c.b1id)]
+        b2 = bodies[objdict.get(c.b2id)]
         
         if (b1.I != 0 and b2.I != 0):
 
@@ -120,10 +113,10 @@ class fixed_constr(constr):
         self.comp = comp # compliance {m/N}
         self.lag = 0 # lagrangian multiplier
 
-    def apply_constr(self, constrs, objs, objdict, h):
+    def apply_constr(self, constrs, bodies, objdict, h):
         cr = self
 
-        b = objs[objdict.get(cr.bid)]
+        b = bodies[objdict.get(cr.bid)]
         
         if b.I != 0:
             body_p = b.p
@@ -145,7 +138,7 @@ class fixed_constr(constr):
 
 class physics_engine:
     @staticmethod
-    def sim(objs, objdict, constrs, f_ext, t_ext, dt, ss):
+    def sim(bodies, objdict, constrs, f_ext, t_ext, dt, ss):
         # identify collisions
         
         h = dt/ss
@@ -154,7 +147,7 @@ class physics_engine:
             
             # make forces here ie friction and stiffness
 
-            for o in objs: # for each object
+            for o in bodies: # for each object
                 o.p_prev = o.p
                 o.v = o.v + h*f_ext.get(o.ID)/o.m
                 o.p = o.p + h*o.v
@@ -165,9 +158,9 @@ class physics_engine:
                     o.q = o.q + h*o.rate
 
             for c in constrs:
-                c.apply_constr(constrs, objs, objdict, h)
+                c.apply_constr(constrs, bodies, objdict, h)
 
-            for o in objs:
+            for o in bodies:
                 o.v = (o.p - o.p_prev)/h
                 o.rate = (o.q - o.q_prev)/h
 
