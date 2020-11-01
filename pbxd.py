@@ -1,23 +1,23 @@
 from math import cos, sin, sqrt, atan2
 # from math import pi
 
-class body:
+class Body:
     def __init__(self, m, p, v, I, q, rate, ID):
         self.p = p
         self.v = v
-        self.p_prev = vec2(0, 0)
+        self.p_prev = Vec2(0, 0)
         self.m = m
         self.I = I
         self.q = q
         self.rate = rate
         self.ID = ID
 
-class particle(body):
+class Particle(Body):
     I = 0
     phi = 0
     rate = 0
 
-class vec2:
+class Vec2:
     """
     vector of 2 floats
     """
@@ -32,40 +32,44 @@ class vec2:
     def rot(self, dq):
         c = cos(dq)
         s = sin(dq)
-        return vec2(c*self.x - s*self.y, s*self.x + c*self.y)
+        return Vec2(c*self.x - s*self.y, s*self.x + c*self.y)
     def arg(self):
         return atan2(self.y, self.x)
     def dir(self):
-        q = self.arg()
-        return vec2(cos(q), sin(q))
+        # q = self.arg()
+        # return Vec2(cos(q), sin(q))
+        return self/self.norm()
 
     def __add__(self, y):
-        if isinstance(y, vec2):
-            return vec2(self.x + y.x, self.y + y.y)
+        if isinstance(y, Vec2):
+            return Vec2(self.x + y.x, self.y + y.y)
         else:
-            return vec2(self.x + y, self.y + y)
+            return Vec2(self.x + y, self.y + y)
 
     def __sub__(self, y):
-        if isinstance(y, vec2):
-            return vec2(self.x - y.x, self.y - y.y)
+        if isinstance(y, Vec2):
+            return Vec2(self.x - y.x, self.y - y.y)
         else:
-            return vec2(self.x - y, self.y - y)
+            return Vec2(self.x - y, self.y - y)
 
     def __rsub__(self, y):
-        if isinstance(y, vec2):
-            return vec2(y.x - self.x, y.y - self.y)
+        if isinstance(y, Vec2):
+            return Vec2(y.x - self.x, y.y - self.y)
         else:
-            return vec2(y - self.x, y - self.y)
+            return Vec2(y - self.x, y - self.y)
 
     def __mul__(self, y):
-        if isinstance(y, vec2):
+        if isinstance(y, Vec2):
             return self.x*y.x + self.y*y.y
         else:
-            return vec2(self.x*y, self.y*y)
+            return Vec2(self.x*y, self.y*y)
+
+    def __rmul__(self, y):
+        return self*y
     
     def __truediv__(self, y):
-        if not isinstance(y, vec2):
-            return vec2(self.x/y, self.y/y)
+        if not isinstance(y, Vec2):
+            return Vec2(self.x/y, self.y/y)
         else:
             raise Exception('dividing by vector')
 
@@ -73,101 +77,87 @@ class vec2:
         return self.norm()
 
     __radd__ = __add__
-    __rmul__ = __mul__
-
-        
 
         
     @staticmethod
     def uvec(q):
-        return vec2(cos(q), sin(q))
-
-class constr: # abstract constraint class
-    def apply_constr(self, constrs, objs, objdict, h):
+        return Vec2(cos(q), sin(q))
+    @staticmethod
+    def cross(a, b):
+        return a.x*b.y - a.y*b.x
+class Constr: # abstract constraint class
+    def apply_constr(self, h):
         raise NotImplementedError
 
-class lin_constr(constr):
+class Lin_Constr(Constr):
     """
     constrain two bodies in relative frame for xbpd sim
     """
-    def __init__(self, b1id, b2id, r1, r2, dist, comp):
+    def __init__(self, body1, body2, r1, r2, dist, compliance):
         self.dist = dist
         self.dist2 = dist**2
-        self.b1id = b1id
-        self.b2id = b2id
+        self.body1 = body1
+        self.body2 = body2
         self.r1 = r1
         self.r2 = r2
-        self.comp = comp
+        self.compliance = compliance
         self.lag = 0
         
-    def apply_constr(self, constrs, bodies, objdict, h):
-        c = self
-        b1 = bodies[objdict.get(c.b1id)]
-        b2 = bodies[objdict.get(c.b2id)]
-        
-        if (b1.I != 0 and b2.I != 0):
+    def apply_constr(self, h):
+        delta = self.body2.p + self.r2.rot(self.body2.q) - (self.body1.p + self.r1.rot(self.body1.q)) # get deviation from constraint
 
-            p1 = b1.p
-            p2 = b2.p
+        comp = self.compliance/h**2 # step normalised compliance
 
-            dp = p2 + c.r2.rot(b2.q) - (p1 + c.r1.rot(b1.q)) # get deviation from constraint
+        dlagrang =  -(delta.norm() - self.dist + comp*self.lag )/(1/self.body1.m + 1/self.body2.m + comp)
+        self.lag = self.lag + dlagrang
 
-            dp = -1*dp
+        impulse = dlagrang*delta.dir()
 
-            comp = c.comp/h**2 # step normalised compliance
+        self.body1.p = self.body1.p + impulse/self.body1.m
+        self.body2.p = self.body2.p - impulse/self.body2.m
 
-            dlag =  (- dp.norm() - comp*c.lag )/(1/b1.m + 1/b2.m + comp)
-            c.lag = c.lag + dlag
+        # IF BREAKS USE 1/2
 
-            imp = dlag*dp.dir()
+        if (self.body1.I != 0 and self.body2.I != 0):
+            self.body1.q = self.body1.q + 1/self.body1.I*Vec2.cross(self.r1, impulse)
+            self.body2.q = self.body2.q - 1/self.body2.I*Vec2.cross(self.r2, impulse)
 
-            b1.p = b1.p + imp/b1.m
-            b2.p = b2.p - imp/b2.m
-
-            # IF BREAKS USE 1/2
-            b1.q = b1.q + 1/b1.I*(b1.p.x*imp.y - b1.p.y*imp.x)
-            b2.q = b2.q - 1/b2.I*(b2.p.x*imp.y - b2.p.y*imp.x)
-    
-    
-class fixed_constr(constr):
+class Fixed_Constr(Constr):
     """
     constrain a body to a intertial frame point for xbpd sim
     """
 
-    def __init__(self, bid, r, p, dist, comp):
-        self.bid = bid # body id
+    def __init__(self, body, r, p, dist, comp):
+        self.body = body # body id
         self.r = r # body frame offset [vec2]
         self.p = p # world frame point [vec2]
         self.dist = dist # dist {m}
-        self.comp = comp # compliance {m/N}
+        self.compliance = comp # compliance {m/N}
         self.lag = 0 # lagrangian multiplier
 
-    def apply_constr(self, constrs, bodies, objdict, h):
-        cr = self
+    def apply_constr(self, h):
+        fixed_p = self.p
+        local_offset = self.r
 
-        b = bodies[objdict.get(cr.bid)]
-        
-        if b.I != 0:
-            body_p = b.p
-            fixed_p = cr.p
-            local_offset = cr.r
+        delta = (self.body.p + local_offset.rot(self.body.q)) - fixed_p
+        comp_norm = self.compliance/h**2
 
-            dp = body_p + local_offset.rot(b.q) - fixed_p
-            comp = cr.comp/h**2
+        dlagrang =  -(delta.norm() - self.dist + comp_norm*self.lag)/(1/self.body.m + comp_norm)
+        self.lag = self.lag + dlagrang
 
-            dlag =  (- dp.norm() - comp*cr.lag )/(1/b.m + comp)
-            cr.lag = cr.lag + dlag
+        # delta_unit = delta.dir()
 
-            imp = dlag*dp.dir()
+        impulse = dlagrang*delta.dir()
 
-            body_p = body_p + imp/b.m
+        self.body.p = self.body.p + impulse/self.body.m
 
-            # IF BREAKS USE 1/2
-            b.q = b.q + 1/b.I*(b.p.x*imp.y - b.p.y*imp.x) # add moment of inertia (r x n)
+        if self.body.I != 0:
+                # IF BREAKS USE 1/2
+            self.body.q = self.body.q - 1/self.body.I*Vec2.cross(self.r, impulse) # add moment of inertia (r x n)
 
-class physics_engine:
+class Physics_Engine:
     @staticmethod
-    def sim(bodies, objdict, constrs, f_ext, t_ext, dt, ss):
+    def step(bodies, objdict, constrs, f_ext, t_ext, dt, ss):
         # identify collisions
         
         h = dt/ss
@@ -192,9 +182,10 @@ class physics_engine:
                     o.q = o.q + h*o.rate
 
             for c in constrs:
-                c.apply_constr(constrs, bodies, objdict, h)
+                c.apply_constr(h)
 
             for o in bodies:
                 o.v = (o.p - o.p_prev)/h
-                o.rate = (o.q - o.q_prev)/h
+                if o.I != 0:
+                    o.rate = (o.q - o.q_prev)/h
 

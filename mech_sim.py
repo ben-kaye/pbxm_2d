@@ -2,7 +2,7 @@ import cocos
 from cocos import draw
 import math
 from math import sqrt, atan2, cos, sin
-from pbxd import body, physics_engine, vec2, lin_constr, fixed_constr
+from pbxd import Body, Physics_Engine, Vec2, Lin_Constr, Fixed_Constr
 # 2D XPBD Solver
 
 # scene gen:
@@ -27,10 +27,10 @@ class render_layer(cocos.layer.Layer):
 # cocos.director.director.run(cocos.scene.Scene(render_layer()))
 
 bodies = list()
-bodies.append(body(1, vec2(0.71, 0.71), vec2(0,0), 1, math.pi/4, 0, 1))
-bodies.append(body(1, vec2(2.3, 1.9), vec2(0,0), 1, math.pi/6, 0, 2))
+# bodies.append(Body(1, Vec2(0.71, 0.71), Vec2(0,0), 1, math.pi/4, 0, 1))
+# bodies.append(Body(1, Vec2(2.3, 1.9), Vec2(0,0), 1, math.pi/6, 0, 2))
 
-
+bodies.append(Body(10, Vec2(5,5), Vec2(0,0), 0, 0, 0, 1))
 
 bodydict = {
     1: 0,
@@ -38,21 +38,32 @@ bodydict = {
 }
 
 f_ext = {
-    2: vec2(0, -9.81),
+    1: Vec2(0, -98.1),
 }
 
 t_ext = {
-    2: 0
+    1: 0
 }
 
 constraints = list()
-constraints.append(lin_constr(1, 2, vec2(1, 0), vec2(-1, 0), 0, 0))
-constraints.append(fixed_constr(1, vec2(-1, 0), vec2(0, 0), 0, 0))
+# constraints.append(Lin_Constr(bodies[0], bodies[1], Vec2(1, 0), Vec2(-1, 0), 0, 0))
+# constraints.append(Fixed_Constr(bodies[0], Vec2(-1, 0), Vec2(0, 0), 0, 0))
+constraints.append(Fixed_Constr(bodies[0], Vec2(0,0), Vec2(0, 0), 5, 0))
+
+T = 0
+dT = 0.01
+SS = 30
 
 while(True):
-    physics_engine.sim(bodies, bodydict, constraints, f_ext, t_ext, 0.01, 30)
-    if bodies[1].p.norm() > 3.5:
+    Physics_Engine.step(bodies, bodydict, constraints, f_ext, t_ext, 0.01, 30)
+    T += dT
+    fric = -1*bodies[0].v
+    f_ext[1] = fric + Vec2(0, -98.1)
+    if bodies[0].p.norm() > 6:
         raise Exception('fucked')
+    if bodies[0].v.norm() < 0.1 and bodies[0].p*Vec2(0, -1) > 4.9:
+        raise Exception('sim done')
+
 
     
 
