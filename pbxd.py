@@ -133,7 +133,7 @@ class Fixed_Constr(Constr):
         self.p = p # world frame point [vec2]
         self.dist = dist # dist {m}
         self.compliance = comp # compliance {m/N}
-        self.lag = 0 # lagrangian multiplier
+        self.lagrange = 0 # lagrangian multiplier
 
     def apply_constr(self, h):
         fixed_p = self.p
@@ -142,12 +142,12 @@ class Fixed_Constr(Constr):
         delta = (self.body.p + local_offset.rot(self.body.q)) - fixed_p
         comp_norm = self.compliance/h**2
 
-        dlagrang =  -(delta.norm() - self.dist + comp_norm*self.lag)/(1/self.body.m + comp_norm)
-        self.lag = self.lag + dlagrang
+        dlagrange =  -(delta.norm() - self.dist + comp_norm*self.lagrange)/(1/self.body.m + comp_norm)
+        self.lagrange = self.lagrange + dlagrange
 
         # delta_unit = delta.dir()
 
-        impulse = dlagrang*delta.dir()
+        impulse = dlagrange*delta.dir()
 
         self.body.p = self.body.p + impulse/self.body.m
 
@@ -158,14 +158,11 @@ class Fixed_Constr(Constr):
 class Physics_Engine:
     @staticmethod
     def step(bodies, objdict, constrs, f_ext, t_ext, dt, ss):
-        # identify collisions
-        
+    # identify collisions
+
         h = dt/ss
 
         for i in range(ss): # for each sub step
-            
-            # make forces here ie friction and stiffness
-
             for o in bodies: # for each object
                 o.p_prev = o.p
 
