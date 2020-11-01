@@ -2,16 +2,16 @@ from math import cos, sin, sqrt, atan2
 # from math import pi
 
 class body:
-    def __init__(self, m, p, v, I, phi, rate, ID):
+    def __init__(self, m, p, v, I, q, rate, ID):
         self.p = p
         self.v = v
         self.p_prev = vec2(0, 0)
         self.m = m
         self.I = I
-        self.phi = phi
+        self.q = q
         self.rate = rate
         self.ID = ID
-        
+
 class particle(body):
     I = 0
     phi = 0
@@ -25,18 +25,6 @@ class vec2:
         self.x = x
         self.y = y
 
-    def __add__(self, y):
-        return vec2(self.x + y.x, self.y + y.y)
-
-    def __sub__(self, y):
-        return vec2(self.x - y.x, self.y - y.y)
-
-    def __mul__(self, y):
-        return self.x*y.x + self.y*y.y
-
-    def __rmul__(self, y):
-        return vec2(self.x*y, self.y*y)
-        
     def normsqd(self):
         return self.x**2 + self.y**2
     def norm(self):
@@ -48,8 +36,47 @@ class vec2:
     def arg(self):
         return atan2(self.y, self.x)
     def dir(self):
-        q = self.arg
+        q = self.arg()
         return vec2(cos(q), sin(q))
+
+    def __add__(self, y):
+        if isinstance(y, vec2):
+            return vec2(self.x + y.x, self.y + y.y)
+        else:
+            return vec2(self.x + y, self.y + y)
+
+    def __sub__(self, y):
+        if isinstance(y, vec2):
+            return vec2(self.x - y.x, self.y - y.y)
+        else:
+            return vec2(self.x - y, self.y - y)
+
+    def __rsub__(self, y):
+        if isinstance(y, vec2):
+            return vec2(y.x - self.x, y.y - self.y)
+        else:
+            return vec2(y - self.x, y - self.y)
+
+    def __mul__(self, y):
+        if isinstance(y, vec2):
+            return self.x*y.x + self.y*y.y
+        else:
+            return vec2(self.x*y, self.y*y)
+    
+    def __truediv__(self, y):
+        if not isinstance(y, vec2):
+            return vec2(self.x/y, self.y/y)
+        else:
+            raise Exception('dividing by vector')
+
+    def __abs__(self):
+        return self.norm()
+
+    __radd__ = __add__
+    __rmul__ = __mul__
+
+        
+
         
     @staticmethod
     def uvec(q):
@@ -75,7 +102,6 @@ class lin_constr(constr):
         
     def apply_constr(self, constrs, bodies, objdict, h):
         c = self
-
         b1 = bodies[objdict.get(c.b1id)]
         b2 = bodies[objdict.get(c.b2id)]
         
@@ -84,8 +110,11 @@ class lin_constr(constr):
             p1 = b1.p
             p2 = b2.p
 
-            dp = p2 + c.r2.rot(b2.q) - (p1 + c.r1.rot(b1.q))
-            comp = c.comp/h**2
+            dp = p2 + c.r2.rot(b2.q) - (p1 + c.r1.rot(b1.q)) # get deviation from constraint
+
+            dp = -1*dp
+
+            comp = c.comp/h**2 # step normalised compliance
 
             dlag =  (- dp.norm() - comp*c.lag )/(1/b1.m + 1/b2.m + comp)
             c.lag = c.lag + dlag
@@ -96,8 +125,8 @@ class lin_constr(constr):
             b2.p = b2.p - imp/b2.m
 
             # IF BREAKS USE 1/2
-            b1.q = b1.q + 1/b1.I*(b1.x*imp.y - b1.y*imp.x)
-            b1.q = b2.q + 1/b2.I*(b2.x*imp.y - b2.y*imp.x)
+            b1.q = b1.q + 1/b1.I*(b1.p.x*imp.y - b1.p.y*imp.x)
+            b2.q = b2.q - 1/b2.I*(b2.p.x*imp.y - b2.p.y*imp.x)
     
     
 class fixed_constr(constr):
@@ -134,7 +163,7 @@ class fixed_constr(constr):
             body_p = body_p + imp/b.m
 
             # IF BREAKS USE 1/2
-            b.q = b.q + 1/b.I*(b.x*imp.y - b.y*imp.x) # add moment of inertia (r x n)
+            b.q = b.q + 1/b.I*(b.p.x*imp.y - b.p.y*imp.x) # add moment of inertia (r x n)
 
 class physics_engine:
     @staticmethod
@@ -149,12 +178,17 @@ class physics_engine:
 
             for o in bodies: # for each object
                 o.p_prev = o.p
-                o.v = o.v + h*f_ext.get(o.ID)/o.m
+
+                f_b = f_ext.get(o.ID)
+                if not f_b is None:
+                    o.v = o.v + h*f_b/o.m
                 o.p = o.p + h*o.v
 
                 if o.I != 0: # if rigid body
                     o.q_prev = o.q
-                    o.rate = o.rate + h*t_ext.get(o.ID)/o.I
+                    t_b = t_ext.get(o.ID)
+                    if not t_b is None:
+                        o.rate = o.rate + h*t_b/o.I
                     o.q = o.q + h*o.rate
 
             for c in constrs:
