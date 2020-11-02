@@ -122,7 +122,7 @@ class Lin_Constr(Constr):
             self.body1.q = self.body1.q + 1/self.body1.I*Vec2.cross(self.r1, impulse)
             self.body2.q = self.body2.q - 1/self.body2.I*Vec2.cross(self.r2, impulse)
 
-class Fixed_Constr(Constr):
+class World_Constr(Constr):
     """
     constrain a body to a intertial frame point for xbpd sim
     """
@@ -169,13 +169,16 @@ class Physics_Engine:
                 f_b = f_ext.get(o.ID)
                 if not f_b is None:
                     o.v = o.v + h*f_b/o.m
+
                 o.p = o.p + h*o.v
 
                 if o.I != 0: # if rigid body
                     o.q_prev = o.q
+                    
                     t_b = t_ext.get(o.ID)
                     if not t_b is None:
                         o.rate = o.rate + h*t_b/o.I
+
                     o.q = o.q + h*o.rate
 
             for c in constrs:
